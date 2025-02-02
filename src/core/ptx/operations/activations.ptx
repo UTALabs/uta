@@ -1,0 +1,150 @@
+.version 7.0
+.target sm_70
+.address_size 64
+
+//
+// ReLU Activation
+//
+.visible .entry relu_fp32(
+    .param .u64 input,      // Input tensor
+    .param .u64 output,     // Output tensor
+    .param .u32 n_elements  // Number of elements
+) {
+    .reg .pred %p1, %p2;
+    .reg .b32 %r<8>;
+    .reg .b64 %rd<8>;
+    .reg .f32 %f<4>;
+
+    // Calculate global thread ID
+    mov.u32 %r1, %ctaid.x;
+    mov.u32 %r2, %ntid.x;
+    mov.u32 %r3, %tid.x;
+    mad.lo.u32 %r4, %r1, %r2, %r3;
+
+    // Load parameters
+    ld.param.u64 %rd1, [input];
+    ld.param.u64 %rd2, [output];
+    ld.param.u32 %r5, [n_elements];
+
+    // Boundary check
+    setp.ge.u32 %p1, %r4, %r5;
+    @%p1 bra END;
+
+    // Calculate input/output addresses
+    cvt.u64.u32 %rd3, %r4;
+    mul.wide.u32 %rd4, %r4, 4;
+    add.u64 %rd5, %rd1, %rd4;  // input + offset
+    add.u64 %rd6, %rd2, %rd4;  // output + offset
+
+    // Load input value
+    ld.global.f32 %f1, [%rd5];
+
+    // ReLU operation: max(0, x)
+    mov.f32 %f2, 0f00000000;
+    max.f32 %f3, %f1, %f2;
+
+    // Store result
+    st.global.f32 [%rd6], %f3;
+
+END:
+    ret;
+}
+
+//
+// Sigmoid Activation
+//
+.visible .entry sigmoid_fp32(
+    .param .u64 input,
+    .param .u64 output,
+    .param .u32 n_elements
+) {
+    .reg .pred %p1;
+    .reg .b32 %r<8>;
+    .reg .b64 %rd<8>;
+    .reg .f32 %f<8>;
+
+    // Calculate global thread ID
+    mov.u32 %r1, %ctaid.x;
+    mov.u32 %r2, %ntid.x;
+    mov.u32 %r3, %tid.x;
+    mad.lo.u32 %r4, %r1, %r2, %r3;
+
+    // Boundary check
+    ld.param.u32 %r5, [n_elements];
+    setp.ge.u32 %p1, %r4, %r5;
+    @%p1 bra END;
+
+    // Calculate addresses
+    ld.param.u64 %rd1, [input];
+    ld.param.u64 %rd2, [output];
+    mul.wide.u32 %rd3, %r4, 4;
+    add.u64 %rd4, %rd1, %rd3;
+    add.u64 %rd5, %rd2, %rd3;
+
+    // Load input
+    ld.global.f32 %f1, [%rd4];
+
+    // Sigmoid implementation: 1 / (1 + exp(-x))
+    // Using fast approximation for exp
+    neg.f32 %f2, %f1;
+    ex2.approx.f32 %f3, %f2;    // exp(-x)
+    mov.f32 %f4, 0f3f800000;    // 1.0f
+    add.f32 %f5, %f3, %f4;      // 1 + exp(-x)
+    rcp.approx.f32 %f6, %f5;    // 1 / (1 + exp(-x))
+
+    // Store result
+    st.global.f32 [%rd5], %f6;
+
+END:
+    ret;
+}
+
+//
+// Tanh Activation
+//
+.visible .entry tanh_fp32(
+    .param .u64 input,
+    .param .u64 output,
+    .param .u32 n_elements
+) {
+    .reg .pred %p1;
+    .reg .b32 %r<8>;
+    .reg .b64 %rd<8>;
+    .reg .f32 %f<8>;
+
+    // Calculate global thread ID
+    mov.u32 %r1, %ctaid.x;
+    mov.u32 %r2, %ntid.x;
+    mov.u32 %r3, %tid.x;
+    mad.lo.u32 %r4, %r1, %r2, %r3;
+
+    // Boundary check
+    ld.param.u32 %r5, [n_elements];
+    setp.ge.u32 %p1, %r4, %r5;
+    @%p1 bra END;
+
+    // Calculate addresses
+    ld.param.u64 %rd1, [input];
+    ld.param.u64 %rd2, [output];
+    mul.wide.u32 %rd3, %r4, 4;
+    add.u64 %rd4, %rd1, %rd3;
+    add.u64 %rd5, %rd2, %rd3;
+
+    // Load input
+    ld.global.f32 %f1, [%rd4];
+
+    // Tanh implementation using exp
+    // tanh(x) = (exp(2x) - 1) / (exp(2x) + 1)
+    mul.f32 %f2, %f1, 0f40000000;  // 2x
+    ex2.approx.f32 %f3, %f2;       // exp(2x)
+    mov.f32 %f4, 0f3f800000;       // 1.0f
+    sub.f32 %f5, %f3, %f4;         // exp(2x) - 1
+    add.f32 %f6, %f3, %f4;         // exp(2x) + 1
+    div.rn.f32 %f7, %f5, %f6;      // (exp(2x) - 1) / (exp(2x) + 1)
+
+    // Store result
+    st.global.f32 [%rd5], %f7;
+
+END:
+    ret;
+}

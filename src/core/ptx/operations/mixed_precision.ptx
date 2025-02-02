@@ -1,0 +1,123 @@
+.version 7.0
+.target sm_70
+.address_size 64
+
+//
+// Mixed Precision Matrix Multiplication
+// Supports FP16 computation and FP32 accumulation
+//
+.visible .entry mixed_precision_matmul(
+    .param .u64 A,         // Input matrix A (FP16)
+    .param .u64 B,         // Input matrix B (FP16)
+    .param .u64 C,         // Output matrix C (FP32)
+    .param .u32 M,
+    .param .u32 N,
+    .param .u32 K,
+    .param .u32 ldA,
+    .param .u32 ldB,
+    .param .u32 ldC
+) {
+    .reg .pred %p<4>;
+    .reg .b32 %r<32>;
+    .reg .b64 %rd<16>;
+    .reg .f16 %h<32>;     // FP16 registers
+    .reg .f32 %f<32>;     // FP32 registers
+
+    // Shared memory configuration
+    .shared .align 16 .b16 shared_a[2048];
+    .shared .align 16 .b16 shared_b[2048];
+
+    // Calculate thread index
+    mov.u32 %r1, %ctaid.x;    // Block row
+    mov.u32 %r2, %ctaid.y;    // Block col
+    mov.u32 %r3, %tid.x;      // Thread x
+    mov.u32 %r4, %tid.y;      // Thread y
+
+    // Initialize FP32 accumulators
+    mov.f32 %f1, 0f00000000;
+    mov.f32 %f2, 0f00000000;
+    // ... (initialize more accumulators)
+
+LOAD_TILE:
+    // Collaborative loading of FP16 data
+    // ... (implement FP16 data loading)
+    
+    bar.sync 0;
+
+COMPUTE:
+    // FP16 Multiplication and FP32 Accumulation
+    // ... (implement mixed precision computation)
+    
+    bar.sync 0;
+
+STORE_RESULT:
+    // Store FP32 results
+    // ... (implement result storing)
+
+END:
+    ret;
+}
+
+//
+// Mixed Precision Training Core Operation
+//
+.visible .entry mixed_precision_training(
+    .param .u64 weights,       // FP16 weights
+    .param .u64 gradients,     // FP16 gradients
+    .param .u64 master_weights, // FP32 master weights
+    .param .u64 optimizer_state, // FP32 optimizer state
+    .param .u32 num_elements,
+    .param .f32 learning_rate
+) {
+    .reg .pred %p<4>;
+    .reg .b32 %r<16>;
+    .reg .b64 %rd<16>;
+    .reg .f16 %h<8>;
+    .reg .f32 %f<16>;
+
+    // Calculate thread index
+    mov.u32 %r1, %ctaid.x;
+    mov.u32 %r2, %ntid.x;
+    mov.u32 %r3, %tid.x;
+    mad.lo.u32 %r4, %r1, %r2, %r3;
+
+    // Boundary check
+    setp.ge.u32 %p1, %r4, %num_elements;
+    @%p1 bra END;
+
+    // Calculate offsets
+    mul.wide.u32 %rd4, %r4, 2;     // FP16 offset
+    mul.wide.u32 %rd5, %r4, 4;     // FP32 offset
+
+    // Load data
+    add.u64 %rd6, %weights, %rd4;
+    add.u64 %rd7, %gradients, %rd4;
+    add.u64 %rd8, %master_weights, %rd5;
+    add.u64 %rd9, %optimizer_state, %rd5;
+
+    // Loading FP16 weights and layers
+    ld.global.f16 %h1, [%rd6];     // weight
+    ld.global.f16 %h2, [%rd7];     // gradient
+    
+    // Convert to FP32 for computation
+    cvt.f32.f16 %f1, %h1;          // FP32 weight
+    cvt.f32.f16 %f2, %h2;          // FP32 gradient
+
+    // Load FP32 master weights and optimizer state
+    ld.global.f32 %f3, [%rd8];     // master weight
+    ld.global.f32 %f4, [%rd9];     // optimizer state
+
+    // Update calculation
+    // ... (implement optimizer update)
+
+    // Convert back to FP16 and store
+    cvt.rn.f16.f32 %h3, %f5;       // convert to FP16
+    st.global.f16 [%rd6], %h3;     // store FP16 weight
+    
+    // Store FP32 master weights and optimizer state
+    st.global.f32 [%rd8], %f5;     // store master weight
+    st.global.f32 [%rd9], %f6;     // store optimizer state
+
+END:
+    ret;
+}

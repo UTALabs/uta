@@ -1,0 +1,58 @@
+# Build directories
+build/
+_build/
+out/
+
+# IDE files
+.vs/
+.vscode/
+.idea/
+*.swp
+*.swo
+*.user
+*.suo
+*.sln.docstates
+
+# Compiled files
+*.o
+*.obj
+*.dll
+*.so
+*.dylib
+*.lib
+*.a
+*.exe
+*.out
+
+# CMake files
+CMakeCache.txt
+CMakeFiles/
+cmake-build-*/
+*.cmake
+!CMakeLists.txt
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Dependency directories
+third_party/
+vendor/
+
+# Generated documentation
+docs/_build/
+docs/html/
+docs/xml/
+
+# Test outputs
+Testing/
+test_results/
+
+# Benchmark results
+benchmark_results/
+*.json
+
+# OS specific
+.DS_Store
+Thumbs.db

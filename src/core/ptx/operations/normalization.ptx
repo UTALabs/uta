@@ -1,0 +1,166 @@
+.version 7.0
+.target sm_70
+.address_size 64
+
+//
+// Layer Normalization
+//
+.visible .entry layernorm_fp32(
+    .param .u64 input,          // Input tensor
+    .param .u64 output,         // Output tensor
+    .param .u64 gamma,          // Scale parameter
+    .param .u64 beta,           // Shift parameter
+    .param .u32 n_elements,     // Elements per normalization group
+    .param .u32 n_groups        // Number of groups
+) {
+    .reg .pred %p<4>;
+    .reg .b32 %r<16>;
+    .reg .b64 %rd<16>;
+    .reg .f32 %f<32>;
+
+    // Shared memory for reduction
+    .shared .align 4 .f32 mean[256];
+    .shared .align 4 .f32 variance[256];
+
+    // Calculate thread and block indices
+    mov.u32 %r1, %ctaid.x;     // Block ID (group)
+    mov.u32 %r2, %tid.x;       // Thread ID
+    mov.u32 %r3, %ntid.x;      // Block size
+
+    // Load parameters
+    ld.param.u64 %rd1, [input];
+    ld.param.u64 %rd2, [output];
+    ld.param.u64 %rd3, [gamma];
+    ld.param.u64 %rd4, [beta];
+    ld.param.u32 %r4, [n_elements];
+    
+    // Initialize accumulators for mean and variance
+    mov.f32 %f1, 0f00000000;   // sum
+    mov.f32 %f2, 0f00000000;   // square sum
+
+    // Calculate start index for this group
+    mul.wide.u32 %rd5, %r1, %r4;
+    cvt.u64.u32 %rd6, %r2;
+    
+    // First pass: calculate mean
+MEAN_LOOP:
+    mul.lo.u32 %r5, %r2, %r3;
+    add.u32 %r6, %r5, %r1;
+    setp.ge.u32 %p1, %r6, %r4;
+    @%p1 bra MEAN_END;
+    
+    // Load input value
+    mul.wide.u32 %rd7, %r6, 4;
+    add.u64 %rd8, %rd1, %rd7;
+    ld.global.f32 %f3, [%rd8];
+    
+    // Accumulate sum
+    add.f32 %f1, %f1, %f3;
+    
+    add.u32 %r2, %r2, %r3;
+    bra MEAN_LOOP;
+MEAN_END:
+
+    // Store partial sum to shared memory
+    st.shared.f32 [mean+%rd6], %f1;
+    
+    // Synchronize threads
+    bar.sync 0;
+    
+    // Reduce mean in shared memory
+    .reg .f32 %mean_val;
+    mov.f32 %mean_val, 0f00000000;
+    
+    // ... (implement reduction)
+    
+    // Second pass: calculate variance
+VARIANCE_LOOP:
+    // ... (implement variance calculation)
+    
+    // Final normalization
+    // For each element: (x - mean) / sqrt(variance + epsilon)
+NORMALIZE:
+    // ... (implement normalization with gamma and beta)
+    
+    // Store result
+    st.global.f32 [%rd2], %f31;
+
+END:
+    ret;
+}
+
+//
+// Batch Normalization
+//
+.visible .entry batchnorm_fp32(
+    .param .u64 input,          // Input tensor
+    .param .u64 output,         // Output tensor
+    .param .u64 mean,           // Running mean
+    .param .u64 variance,       // Running variance
+    .param .u64 gamma,          // Scale parameter
+    .param .u64 beta,           // Shift parameter
+    .param .u32 n_elements,     // Elements per feature
+    .param .u32 n_features     // Number of features
+) {
+    .reg .pred %p<4>;
+    .reg .b32 %r<16>;
+    .reg .b64 %rd<16>;
+    .reg .f32 %f<16>;
+
+    // Calculate indices
+    mov.u32 %r1, %ctaid.x;     // Block ID (feature)
+    mov.u32 %r2, %tid.x;       // Thread ID
+    mov.u32 %r3, %ntid.x;      // Block size
+
+    // Load parameters
+    ld.param.u64 %rd1, [input];
+    ld.param.u64 %rd2, [output];
+    ld.param.u64 %rd3, [mean];
+    ld.param.u64 %rd4, [variance];
+    ld.param.u64 %rd5, [gamma];
+    ld.param.u64 %rd6, [beta];
+    
+    // Load feature statistics
+    mul.wide.u32 %rd7, %r1, 4;
+    add.u64 %rd8, %rd3, %rd7;      // mean + feature_offset
+    add.u64 %rd9, %rd4, %rd7;      // variance + feature_offset
+    add.u64 %rd10, %rd5, %rd7;     // gamma + feature_offset
+    add.u64 %rd11, %rd6, %rd7;     // beta + feature_offset
+    
+    ld.global.f32 %f1, [%rd8];     // mean
+    ld.global.f32 %f2, [%rd9];     // variance
+    ld.global.f32 %f3, [%rd10];    // gamma
+    ld.global.f32 %f4, [%rd11];    // beta
+    
+    // Calculate sqrt(variance + epsilon)
+    add.f32 %f5, %f2, 0f3d800000;  // variance + epsilon (1e-5)
+    sqrt.rn.f32 %f6, %f5;          // sqrt(variance + epsilon)
+    
+    // Process elements
+NORMALIZE:
+    mul.lo.u32 %r4, %r2, %r3;
+    add.u32 %r5, %r4, %r1;
+    setp.ge.u32 %p1, %r5, %n_elements;
+    @%p1 bra END;
+    
+    // Load input
+    mul.wide.u32 %rd12, %r5, 4;
+    add.u64 %rd13, %rd1, %rd12;
+    ld.global.f32 %f7, [%rd13];
+    
+    // Normalize
+    sub.f32 %f8, %f7, %f1;         // x - mean
+    div.rn.f32 %f9, %f8, %f6;      // (x - mean) / sqrt(var + eps)
+    mul.f32 %f10, %f9, %f3;        // gamma * norm
+    add.f32 %f11, %f10, %f4;       // gamma * norm + beta
+    
+    // Store result
+    add.u64 %rd14, %rd2, %rd12;
+    st.global.f32 [%rd14], %f11;
+    
+    add.u32 %r2, %r2, %r3;
+    bra NORMALIZE;
+
+END:
+    ret;
+}

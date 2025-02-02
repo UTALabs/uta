@@ -1,0 +1,73 @@
+.version 7.0
+.target sm_70
+.address_size 64
+
+// Optimized 2D convolution kernel
+.visible .entry conv2d_fp32(
+    .param .u64 input,          // Input tensor
+    .param .u64 weights,        // Convolution weights
+    .param .u64 output,         // Output tensor
+    .param .u64 bias,           // Optional bias
+    .param .u32 batch_size,     // Dimensions
+    .param .u32 in_channels,
+    .param .u32 out_channels,
+    .param .u32 height,
+    .param .u32 width,
+    .param .u32 kernel_h,
+    .param .u32 kernel_w,
+    .param .u32 stride_h,
+    .param .u32 stride_w,
+    .param .u32 pad_h,
+    .param .u32 pad_w
+) {
+    .reg .pred %p<8>;
+    .reg .b32 %r<64>;
+    .reg .b64 %rd<32>;
+    .reg .f32 %f<128>;
+
+    // Shared memory for input and weight tiles
+    .shared .align 16 .b32 tile_input[2048];
+    .shared .align 16 .b32 tile_weight[2048];
+
+    // Calculate thread indices
+    mov.u32 %r1, %ctaid.x;     // Block ID x
+    mov.u32 %r2, %ctaid.y;     // Block ID y
+    mov.u32 %r3, %ctaid.z;     // Block ID z
+    mov.u32 %r4, %tid.x;       // Thread ID x
+    mov.u32 %r5, %tid.y;       // Thread ID y
+
+    // Calculate output position
+    // ... (implement position calculation)
+
+    // Initialize accumulator
+    mov.f32 %f1, 0f00000000;
+
+    // Main convolution loop
+    // For each kernel position
+KERNEL_LOOP_START:
+    // Load input tile
+    // ... (implement tile loading)
+
+    // Load weight tile
+    // ... (implement weight loading)
+
+    // Synchronize threads
+    bar.sync 0;
+
+    // Compute convolution for this position
+    // ... (implement convolution computation)
+
+    // Check loop conditions and branch
+    add.u32 %r20, %r20, 1;
+    setp.lt.u32 %p1, %r20, %r21;
+    @%p1 bra KERNEL_LOOP_START;
+
+    // Load bias if present
+    // ... (implement bias addition)
+
+    // Store result
+    // ... (implement result storing)
+
+END:
+    ret;
+}

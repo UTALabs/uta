@@ -1,0 +1,132 @@
+.version 7.0
+.target sm_70
+.address_size 64
+
+//
+// Sinusoidal Positional Encoding
+//
+.visible .entry positional_encoding_fp32(
+    .param .u64 output,         // Output tensor
+    .param .u32 seq_length,    // Sequence length
+    .param .u32 embedding_dim, // Embedding dimension
+    .param .f32 scale         // Optional scaling factor
+) {
+    .reg .pred %p<4>;
+    .reg .b32 %r<16>;
+    .reg .b64 %rd<8>;
+    .reg .f32 %f<16>;
+
+    // Calculate indices
+    mov.u32 %r1, %ctaid.x;     // Position in sequence
+    mov.u32 %r2, %tid.x;       // Dimension index
+    
+    // Load parameters
+    ld.param.u64 %rd1, [output];
+    ld.param.u32 %r3, [seq_length];
+    ld.param.u32 %r4, [embedding_dim];
+    ld.param.f32 %f1, [scale];
+
+    // Check bounds
+    setp.ge.u32 %p1, %r1, %r3;
+    @%p1 bra END;
+    setp.ge.u32 %p2, %r2, %r4;
+    @%p2 bra END;
+
+    // Calculate output offset
+    mul.lo.u32 %r5, %r1, %r4;  // position * embedding_dim
+    add.u32 %r6, %r5, %r2;     // + dimension
+    mul.wide.u32 %rd2, %r6, 4;
+    add.u64 %rd3, %rd1, %rd2;
+
+    // Calculate dimension frequency
+    and.b32 %r7, %r2, 1;       // is_odd = dim & 1
+    shr.u32 %r8, %r2, 1;       // dim_half = dim >> 1
+    
+    // Calculate position / 10000^(2i/d)
+    cvt.f32.u32 %f2, %r8;      // Convert dim_half to float
+    mul.f32 %f3, %f2, 0f40000000;  // dim_half * 2
+    cvt.f32.u32 %f4, %r4;      // Convert embedding_dim to float
+    div.rn.f32 %f5, %f3, %f4;  // (2 * dim_half) / embedding_dim
+    
+    mov.f32 %f6, 0f40c388c3;   // log(10000.0f)
+    mul.f32 %f7, %f5, %f6;     // (2 * dim_half / embedding_dim) * log(10000)
+    ex2.approx.f32 %f8, %f7;   // 10000^(2i/d)
+    
+    cvt.f32.u32 %f9, %r1;      // Convert position to float
+    div.rn.f32 %f10, %f9, %f8; // pos / 10000^(2i/d)
+
+    // Calculate sin or cos based on dimension
+    setp.eq.u32 %p3, %r7, 0;   // if is_odd == 0
+    
+    // Calculate sin and cos
+    sin.approx.f32 %f11, %f10;
+    cos.approx.f32 %f12, %f10;
+    
+    // Select sin or cos based on dimension
+    selp.f32 %f13, %f11, %f12, %p3;
+    
+    // Apply scaling if needed
+    mul.f32 %f14, %f13, %f1;
+
+    // Store result
+    st.global.f32 [%rd3], %f14;
+
+END:
+    ret;
+}
+
+//
+// Learned Positional Embedding
+//
+.visible .entry learned_position_embedding_fp32(
+    .param .u64 embeddings,     // Position embedding weights
+    .param .u64 output,         // Output tensor
+    .param .u32 seq_length,    // Sequence length
+    .param .u32 embedding_dim, // Embedding dimension
+    .param .u32 max_positions // Maximum number of positions
+) {
+    .reg .pred %p<4>;
+    .reg .b32 %r<16>;
+    .reg .b64 %rd<8>;
+    .reg .f32 %f<4>;
+
+    // Calculate indices
+    mov.u32 %r1, %ctaid.x;     // Position in sequence
+    mov.u32 %r2, %tid.x;       // Dimension index
+
+    // Load parameters
+    ld.param.u64 %rd1, [embeddings];
+    ld.param.u64 %rd2, [output];
+    ld.param.u32 %r3, [seq_length];
+    ld.param.u32 %r4, [embedding_dim];
+    ld.param.u32 %r5, [max_positions];
+
+    // Check bounds
+    setp.ge.u32 %p1, %r1, %r3;
+    @%p1 bra END;
+    setp.ge.u32 %p2, %r2, %r4;
+    @%p2 bra END;
+
+    // Clamp position to max_positions
+    min.u32 %r6, %r1, %r5;
+
+    // Calculate offsets
+    mul.lo.u32 %r7, %r6, %r4;  // position * embedding_dim
+    add.u32 %r8, %r7, %r2;     // + dimension
+    mul.wide.u32 %rd3, %r8, 4;
+    
+    // Calculate addresses
+    add.u64 %rd4, %rd1, %rd3;  // embeddings address
+    
+    mul.lo.u32 %r9, %r1, %r4;  // original position * embedding_dim
+    add.u32 %r10, %r9, %r2;    // + dimension
+    mul.wide.u32 %rd5, %r10, 4;
+    add.u64 %rd6, %rd2, %rd5;  // output address
+
+    // Load and store embedding
+    ld.global.f32 %f1, [%rd4];
+    st.global.f32 [%rd6], %f1;
+
+END:
+    ret;
+}

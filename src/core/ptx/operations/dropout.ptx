@@ -1,0 +1,127 @@
+.version 7.0
+.target sm_70
+.address_size 64
+
+//
+// Dropout Forward Pass
+//
+.visible .entry dropout_forward_fp32(
+    .param .u64 input,          // Input tensor
+    .param .u64 output,         // Output tensor
+    .param .u64 mask,           // Dropout mask (binary)
+    .param .u64 seed,           // Random seed
+    .param .f32 dropout_prob,   // Dropout probability
+    .param .u32 n_elements     // Number of elements
+) {
+    .reg .pred %p<4>;
+    .reg .b32 %r<16>;
+    .reg .b64 %rd<16>;
+    .reg .f32 %f<8>;
+
+    // Calculate thread index
+    mov.u32 %r1, %ctaid.x;
+    mov.u32 %r2, %ntid.x;
+    mov.u32 %r3, %tid.x;
+    mad.lo.u32 %r4, %r1, %r2, %r3;
+
+    // Load parameters
+    ld.param.u64 %rd1, [input];
+    ld.param.u64 %rd2, [output];
+    ld.param.u64 %rd3, [mask];
+    ld.param.u64 %rd4, [seed];
+    ld.param.f32 %f1, [dropout_prob];
+    ld.param.u32 %r5, [n_elements];
+
+    // Check bounds
+    setp.ge.u32 %p1, %r4, %r5;
+    @%p1 bra END;
+
+    // Calculate addresses
+    mul.wide.u32 %rd5, %r4, 4;
+    add.u64 %rd6, %rd1, %rd5;  // input address
+    add.u64 %rd7, %rd2, %rd5;  // output address
+    add.u64 %rd8, %rd3, %rd5;  // mask address
+
+    // Load input value
+    ld.global.f32 %f2, [%rd6];
+
+    // Generate random number using xoshiro128** algorithm
+    // ... (implement random number generation)
+    
+    // Compare with dropout probability
+    setp.lt.f32 %p2, %f3, %f1;
+    
+    // Apply dropout
+    selp.f32 %f4, 0f00000000, %f2, %p2;  // Set to 0 if dropped
+    
+    // Scale output
+    sub.f32 %f5, 0f3f800000, %f1;        // 1 - dropout_prob
+    rcp.rn.f32 %f6, %f5;                 // 1 / (1 - dropout_prob)
+    mul.f32 %f7, %f4, %f6;               // Scale by 1 / (1 - dropout_prob)
+
+    // Store results
+    st.global.f32 [%rd7], %f7;           // Store output
+    selp.u32 %r6, 1, 0, %p2;
+    st.global.u8 [%rd8], %r6;            // Store mask
+
+END:
+    ret;
+}
+
+//
+// Dropout Backward Pass
+//
+.visible .entry dropout_backward_fp32(
+    .param .u64 grad_output,    // Gradient from upper layer
+    .param .u64 mask,           // Dropout mask from forward pass
+    .param .u64 grad_input,     // Gradient for input
+    .param .f32 dropout_prob,   // Dropout probability
+    .param .u32 n_elements     // Number of elements
+) {
+    .reg .pred %p<4>;
+    .reg .b32 %r<8>;
+    .reg .b64 %rd<16>;
+    .reg .f32 %f<8>;
+
+    // Calculate thread index
+    mov.u32 %r1, %ctaid.x;
+    mov.u32 %r2, %ntid.x;
+    mov.u32 %r3, %tid.x;
+    mad.lo.u32 %r4, %r1, %r2, %r3;
+
+    // Load parameters
+    ld.param.u64 %rd1, [grad_output];
+    ld.param.u64 %rd2, [mask];
+    ld.param.u64 %rd3, [grad_input];
+    ld.param.f32 %f1, [dropout_prob];
+    ld.param.u32 %r5, [n_elements];
+
+    // Check bounds
+    setp.ge.u32 %p1, %r4, %r5;
+    @%p1 bra END;
+
+    // Calculate addresses
+    mul.wide.u32 %rd4, %r4, 4;
+    add.u64 %rd5, %rd1, %rd4;  // grad_output address
+    add.u64 %rd6, %rd2, %rd4;  // mask address
+    add.u64 %rd7, %rd3, %rd4;  // grad_input address
+
+    // Load values
+    ld.global.f32 %f2, [%rd5];  // Load gradient
+    ld.global.u8 %r6, [%rd6];   // Load mask
+
+    // Calculate scaling factor
+    sub.f32 %f3, 0f3f800000, %f1;  // 1 - dropout_prob
+    rcp.rn.f32 %f4, %f3;           // 1 / (1 - dropout_prob)
+
+    // Apply mask and scaling
+    setp.eq.u32 %p2, %r6, 1;
+    selp.f32 %f5, %f2, 0f00000000, %p2;
+    mul.f32 %f6, %f5, %f4;
+
+    // Store result
+    st.global.f32 [%rd7], %f6;
+
+END:
+    ret;
+}

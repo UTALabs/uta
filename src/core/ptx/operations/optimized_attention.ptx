@@ -1,0 +1,134 @@
+.version 7.0
+.target sm_70
+.address_size 64
+
+//
+// Optimized multi-head attention implementation
+// feature：
+// 1. Using Block Matrix Multiplication
+// 2. Shared memory optimization
+// 3. Cooperative loading
+// 4. Double buffering optimization
+//
+.visible .entry optimized_multihead_attention(
+    .param .u64 query,          // [batch_size, num_heads, seq_len, head_dim]
+    .param .u64 key,           // [batch_size, num_heads, seq_len, head_dim]
+    .param .u64 value,         // [batch_size, num_heads, seq_len, head_dim]
+    .param .u64 output,        // [batch_size, num_heads, seq_len, head_dim]
+    .param .u64 mask,          // Optional attention mask
+    .param .u32 batch_size,
+    .param .u32 num_heads,
+    .param .u32 seq_len,
+    .param .u32 head_dim
+) {
+    .reg .pred %p<8>;
+    .reg .b32 %r<32>;
+    .reg .b64 %rd<32>;
+    .reg .f32 %f<128>;
+
+    // Shared Memory Configuration - Double Buffering
+    .shared .align 16 .f32 shared_q[2][1024];  // Query tiles
+    .shared .align 16 .f32 shared_k[2][1024];  // Key tiles
+    .shared .align 16 .f32 shared_v[2][1024];  // Value tiles
+    .shared .align 16 .f32 shared_s[1024];     // Scores
+
+    // Calculate thread indices
+    mov.u32 %r1, %ctaid.x;     // Batch index
+    mov.u32 %r2, %ctaid.y;     // Head index
+    mov.u32 %r3, %ctaid.z;     // Sequence position
+    mov.u32 %r4, %tid.x;       // Thread in block
+
+    // load dimension parameter
+    ld.param.u32 %r5, [batch_size];
+    ld.param.u32 %r6, [num_heads];
+    ld.param.u32 %r7, [seq_len];
+    ld.param.u32 %r8, [head_dim];
+
+    // Calculate scaling factor
+    cvt.f32.u32 %f1, %r8;
+    sqrt.rn.f32 %f2, %f1;
+    rcp.rn.f32 %f3, %f2;       // 1/sqrt(d_k)
+
+    // Initialize accumulators
+    mov.f32 %f4, 0f00000000;   // Accumulator for scores
+    mov.f32 %f5, 0f00000000;   // Max value for softmax
+    
+LOAD_TILE:
+    // Cooperative loading of data into shared memory
+    // Using double buffering
+    // ... (implement cooperative loading)
+    
+COMPUTE_QK:
+    // Calculating the attention score Q * K ^ T
+    // Using blocked matrix multiplication
+    // ... (implement blocked matrix multiplication)
+    
+    bar.sync 0;
+    
+SOFTMAX:
+    // Optimized Softmax implementation
+    // Using warp-level reduction
+    // ... (implement optimized softmax)
+    
+    bar.sync 0;
+    
+COMPUTE_ATTENTION:
+    // Calculating the attention output
+    // Using blocked matrix multiplication
+    // ... (implement attention computation)
+    
+    bar.sync 0;
+
+STORE_RESULT:
+    // Storing the result
+    // ... (implement result storing)
+
+END:
+    ret;
+}
+
+//
+// Sparse attention implementation
+// Using block sparse format
+//
+.visible .entry sparse_attention(
+    .param .u64 query,
+    .param .u64 key,
+    .param .u64 value,
+    .param .u64 output,
+    .param .u64 sparsity_mask,    // Sparse Pattern Mask
+    .param .u64 block_indices,    // Non-zero Block Indices
+    .param .u32 batch_size,
+    .param .u32 num_heads,
+    .param .u32 seq_len,
+    .param .u32 head_dim,
+    .param .u32 block_size        // Sparse Block Size
+) {
+    .reg .pred %p<8>;
+    .reg .b32 %r<32>;
+    .reg .b64 %rd<32>;
+    .reg .f32 %f<64>;
+
+    // Shared memory configuration
+    .shared .align 16 .f32 shared_block[1024];
+    
+    // Calculate thread index
+    mov.u32 %r1, %ctaid.x;     // Block index
+    mov.u32 %r2, %tid.x;       // Thread in block
+
+    // Load block indices
+    // ... (implement sparse block loading)
+    
+PROCESS_SPARSE_BLOCK:
+    // Processing non-zero blocks
+    // ... (implement sparse block processing)
+    
+    bar.sync 0;
+    
+STORE_SPARSE_RESULT:
+    // Storing the sparse result
+    // ... (implement sparse result storing)
+
+END:
+    ret;
+}

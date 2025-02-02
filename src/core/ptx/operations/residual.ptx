@@ -1,0 +1,108 @@
+.version 7.0
+.target sm_70
+.address_size 64
+
+//
+// Residual Connection Forward
+//
+.visible .entry residual_add_fp32(
+    .param .u64 input,          // Main path input
+    .param .u64 residual,       // Residual path input
+    .param .u64 output,         // Output tensor
+    .param .u32 n_elements     // Number of elements
+) {
+    .reg .pred %p<4>;
+    .reg .b32 %r<8>;
+    .reg .b64 %rd<16>;
+    .reg .f32 %f<4>;
+
+    // Calculate thread index
+    mov.u32 %r1, %ctaid.x;
+    mov.u32 %r2, %ntid.x;
+    mov.u32 %r3, %tid.x;
+    mad.lo.u32 %r4, %r1, %r2, %r3;
+
+    // Load parameters
+    ld.param.u64 %rd1, [input];
+    ld.param.u64 %rd2, [residual];
+    ld.param.u64 %rd3, [output];
+    ld.param.u32 %r5, [n_elements];
+
+    // Check bounds
+    setp.ge.u32 %p1, %r4, %r5;
+    @%p1 bra END;
+
+    // Calculate addresses
+    mul.wide.u32 %rd4, %r4, 4;
+    add.u64 %rd5, %rd1, %rd4;    // input address
+    add.u64 %rd6, %rd2, %rd4;    // residual address
+    add.u64 %rd7, %rd3, %rd4;    // output address
+
+    // Load values
+    ld.global.f32 %f1, [%rd5];   // Load input
+    ld.global.f32 %f2, [%rd6];   // Load residual
+
+    // Add residual connection
+    add.f32 %f3, %f1, %f2;
+
+    // Store result
+    st.global.f32 [%rd7], %f3;
+
+END:
+    ret;
+}
+
+//
+// Residual Connection with Pre-Layer Normalization
+//
+.visible .entry residual_prenorm_fp32(
+    .param .u64 input,          // Input tensor
+    .param .u64 gamma,          // LayerNorm scale
+    .param .u64 beta,           // LayerNorm bias
+    .param .u64 normalized,     // Normalized output (for sublayer)
+    .param .u64 output,         // Final output (after residual)
+    .param .u32 n_elements,    // Elements per group
+    .param .u32 n_groups      // Number of normalization groups
+) {
+    .reg .pred %p<4>;
+    .reg .b32 %r<16>;
+    .reg .b64 %rd<16>;
+    .reg .f32 %f<16>;
+
+    // Shared memory for reduction
+    .shared .align 4 .f32 mean[256];
+    .shared .align 4 .f32 variance[256];
+
+    // Calculate indices
+    mov.u32 %r1, %ctaid.x;     // Group index
+    mov.u32 %r2, %tid.x;       // Thread in group
+    mov.u32 %r3, %ntid.x;      // Group size
+
+    // Load parameters
+    ld.param.u64 %rd1, [input];
+    ld.param.u64 %rd2, [gamma];
+    ld.param.u64 %rd3, [beta];
+    ld.param.u64 %rd4, [normalized];
+    ld.param.u64 %rd5, [output];
+    ld.param.u32 %r4, [n_elements];
+    ld.param.u32 %r5, [n_groups];
+
+    // First pass: calculate mean
+    // ... (implement mean calculation)
+
+    // Second pass: calculate variance
+    // ... (implement variance calculation)
+
+    // Third pass: normalize and store
+    // ... (implement normalization)
+
+    // Store normalized result for sublayer
+    st.global.f32 [%rd4], %f8;
+
+    // After sublayer: add residual connection
+    add.f32 %f9, %f8, %f1;     // Add original input
+    st.global.f32 [%rd5], %f9;
+
+END:
+    ret;
+}

@@ -1,0 +1,140 @@
+.version 7.0
+.target sm_70
+.address_size 64
+
+//
+// Scaled Dot-Product Attention
+//
+.visible .entry attention_fp32(
+    .param .u64 query,          // Query matrix [batch_size, num_heads, seq_len, head_dim]
+    .param .u64 key,            // Key matrix
+    .param .u64 value,          // Value matrix
+    .param .u64 output,         // Output tensor
+    .param .u64 mask,           // Optional attention mask
+    .param .u32 batch_size,
+    .param .u32 num_heads,
+    .param .u32 seq_len,
+    .param .u32 head_dim,
+    .param .u32 has_mask
+) {
+    .reg .pred %p<8>;
+    .reg .b32 %r<32>;
+    .reg .b64 %rd<32>;
+    .reg .f32 %f<64>;
+
+    // Shared memory for intermediate results
+    .shared .align 16 .b32 shared_qk[1024];     // Store Q*K^T
+    .shared .align 16 .b32 shared_softmax[1024]; // Store softmax results
+
+    // Calculate thread indices
+    mov.u32 %r1, %ctaid.x;     // Batch index
+    mov.u32 %r2, %ctaid.y;     // Head index
+    mov.u32 %r3, %ctaid.z;     // Query sequence position
+    mov.u32 %r4, %tid.x;       // Thread within block
+
+    // Load dimensions
+    ld.param.u32 %r5, [batch_size];
+    ld.param.u32 %r6, [num_heads];
+    ld.param.u32 %r7, [seq_len];
+    ld.param.u32 %r8, [head_dim];
+    ld.param.u32 %r9, [has_mask];
+
+    // Calculate scaling factor
+    cvt.f32.u32 %f1, %r8;
+    sqrt.rn.f32 %f2, %f1;
+    rcp.rn.f32 %f3, %f2;       // 1/sqrt(d_k)
+
+    // Calculate base indices
+    // ... (implement index calculations for batch, head, and sequence dimensions)
+
+    // Step 1: Compute Q*K^T
+QK_LOOP:
+    // ... (implement matrix multiplication Q*K^T)
+    
+    // Synchronize threads
+    bar.sync 0;
+
+    // Step 2: Scale and apply mask
+SCALE:
+    // ... (implement scaling and masking)
+    
+    // Step 3: Softmax
+SOFTMAX:
+    // First pass: find max for numerical stability
+    // ... (implement max finding)
+    
+    bar.sync 0;
+    
+    // Second pass: compute exp and sum
+    // ... (implement exp and sum)
+    
+    bar.sync 0;
+    
+    // Third pass: normalize
+    // ... (implement normalization)
+    
+    bar.sync 0;
+
+    // Step 4: Multiply with V
+MULTIPLY_V:
+    // ... (implement multiplication with V)
+    
+    // Store final results
+STORE_RESULTS:
+    // ... (implement result storing)
+
+END:
+    ret;
+}
+
+//
+// Multi-Head Attention Forward Pass
+//
+.visible .entry multihead_attention_fp32(
+    .param .u64 input,          // Input tensor
+    .param .u64 qw,             // Query weights
+    .param .u64 kw,             // Key weights
+    .param .u64 vw,             // Value weights
+    .param .u64 output,         // Output tensor
+    .param .u32 batch_size,
+    .param .u32 seq_len,
+    .param .u32 model_dim,
+    .param .u32 num_heads
+) {
+    .reg .pred %p<4>;
+    .reg .b32 %r<16>;
+    .reg .b64 %rd<16>;
+    .reg .f32 %f<32>;
+
+    // Calculate dimensions
+    mov.u32 %r1, %ctaid.x;     // Batch index
+    mov.u32 %r2, %ctaid.y;     // Sequence position
+    mov.u32 %r3, %tid.x;       // Thread within block
+
+    // Load parameters
+    ld.param.u32 %r4, [batch_size];
+    ld.param.u32 %r5, [seq_len];
+    ld.param.u32 %r6, [model_dim];
+    ld.param.u32 %r7, [num_heads];
+
+    // Calculate head dimension
+    div.u32 %r8, %r6, %r7;     // head_dim = model_dim / num_heads
+
+    // Step 1: Linear projections
+    // ... (implement Q, K, V linear projections)
+
+    // Step 2: Split heads
+    // ... (implement head splitting)
+
+    // Step 3: Scaled dot-product attention
+    // ... (call attention_fp32)
+
+    // Step 4: Concatenate heads
+    // ... (implement head concatenation)
+
+    // Step 5: Final linear projection
+    // ... (implement output projection)
+
+END:
+    ret;
+}
