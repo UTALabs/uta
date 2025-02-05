@@ -6,7 +6,7 @@
 namespace uta {
 namespace ops {
 
-// Basic mathematical operations
+//  Basic mathematical operations
 std::shared_ptr<Tensor> add(const Tensor& a, const Tensor& b);
 std::shared_ptr<Tensor> subtract(const Tensor& a, const Tensor& b);
 std::shared_ptr<Tensor> multiply(const Tensor& a, const Tensor& b);
