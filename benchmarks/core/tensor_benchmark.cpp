@@ -21,7 +21,7 @@ protected:
 };
 
 BENCHMARK_DEFINE_F(TensorBenchmark, MatMul)(benchmark::State& state) {
-    const int M = state.range(0);
+    const int M = state.range(0); 
     const int N = state.range(0);
     const int K = state.range(0);
 
