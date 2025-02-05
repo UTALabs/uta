@@ -10,7 +10,7 @@ int main() {
 
         // Create context
         auto context = uta::Context::create({
-            .enabled_devices = {uta::DeviceType::CUDA},
+            .enabled_devices = {uta::DeviceType::CUDA}, 
             .enable_profiling = true
         });
 
