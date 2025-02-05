@@ -54,7 +54,7 @@ TEST_F(ContextTest, ErrorHandling) {
         std::runtime_error
     );
     
-    // Test invalid device
+    //  Test invalid device
     EXPECT_THROW(
         context->getDevice(uta::DeviceType::GPU, 9999),
         std::runtime_error
