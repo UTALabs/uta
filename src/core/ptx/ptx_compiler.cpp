@@ -57,7 +57,7 @@ private:
                           const std::string& cubinFile,
                           const std::string& arch) {
         // Use AMD tools to compile PTX-like code
-        // Implementation details...
+        //  Implementation details...
     }
 
     void compileWithIntelGPU(const std::string& ptxFile,
