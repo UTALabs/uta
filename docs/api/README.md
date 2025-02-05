@@ -16,7 +16,7 @@ This document provides detailed information about the UTA API.
 The Context class manages the global state and resources of UTA.
 
 ```cpp
-// Create a new context
+// Create a new context 
 auto context = uta::Context::create({
     .enabled_devices = {
         uta::DeviceType::GPU,  // Any PTX-compatible GPU
